@@ -1,9 +1,7 @@
-package main
+package bip32
 
 import (
-	"fmt"
 	"bytes"
-	"errors"
 	"binary"
 	"math/big"
 	"crypto/rand"
@@ -11,77 +9,55 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 
+	"golang.org/x/crypto/ripemd160"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 )
 
-func main() {
-	fmt.Println("Development...")
-	entropy := make([]byte, 32)
-	rand.Read(entropy)
-	a,_ := GetMasterKey(entropy)
-	_,_ = NewChildKey(a,1)
-	//fmt.Println(curve256.N.Bytes())
+
+/************************** Extended Key Struct *****************************/
+type extKey struct {
+	Version			[]byte
+	Depth			byte
+	Fingerprint		[]byte
+	ChildNumber		[]byte
+	ChainCode		[]byte
+	Key				[]byte
 }
 
 
-
-/************************** Package variables *****************************/
+/************************** Internal package variables *****************************/
 var (
 	curve256 = secp256k1.S256()
 	zeroPrivKey = make([]byte, 32)
-
-	invalidPrivKeyError = errors.New("Invalid private key: must be larger than 0 and smaller than the order of the secp256k1 curve")
-	readerHmacError = errors.New("Error reading the bits from the HMAC function")
-	hardenedPubKeyError = errors.New("Not possible to create hardened child key from a public key")
-	notPrivKeyError = errors.New("Key must be private in order to get the public key")
-
 	privWalletVersion, _ = hex.DecodeString("0488ADE4")
 	pubWalletVersion, _ = hex.DecodeString("0x0488B21E")
 	limitHardened = uint32(0x80000000)
 )
 
-
-
-/************************** Structs *****************************/
-type Key struct {
-	Version			[]byte
-	Depth			byte
-	FingerPrint		[]byte
-	ChildNumber		[]byte
-	ChainCode		[]byte
-	Key				[]byte
-	IsExtended		bool
-	IsPrivate		bool
-}
-
-
-
-
-/************************** Main Functions *****************************/
-// GetMasterKey 
-func GetMasterKey(seed []byte) (*Key, error){
+/************************** Master Key Generation *****************************/
+// GenMasterKey takes a seed as an input and returns a Key object for the master
+// key
+func GenMasterKey(seed []byte) (*extKey, error){
 	// we get the HMAC-512 of the seed
-	privateKey, chainCode, err := getHmac512(seed)
-	if err!=nil {
-		return nil, err		
-	}
+	hmac := getHmac512(seed)
+	key := hmac[:32] 
+	chainCode := hmac[32:] 
 
 	// we check that the private key is valid
-	err = checkValidPrivateKey(privateKey)
+	err = checkValidMasterKey(key)
 	if err!=nil {
 		return nil, err		
 	}
 
-	// the private key is saved as a pointer to a Key struct
-	masterKey := &Key {
+	// the master key is saved as a pointer to a Key struct
+	masterKey := &extKey {
 		Version:		privWalletVersion,
 		Depth:			0,
-		FingerPrint:	[]byte{0, 0, 0, 0},
+		Fingerprint:	[]byte{0, 0, 0, 0},
 		ChildNumber: 	[]byte{0, 0, 0, 0},
 		ChainCode:		chainCode,
-		Key: 			append([]byte{0}, privateKey...),
-		IsExtended:		true,
-		IsPrivate:		true,
+		Key: 			append([]byte{0}, key...),
 	}
 
 	return masterKey, nil
@@ -89,109 +65,176 @@ func GetMasterKey(seed []byte) (*Key, error){
 
 
 
+/************************** Child Key Derivation *****************************/
+// ChildKeyGenPriv returns a Key object with a private child key using as input
+// its parent key and a child index (capable of producing both hardened and
+// non-hardened keys)
+func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
+	// we check that the parent is a private key
+	if err:=checkPrivKey(parentKey); err!=nil {
+		return nil, err
+	}
+	
+	// we get the child index as a []byte
+	childIndex := make([]byte, 4)
+	binary.BigEndian.PutUint32(childIndex, index)
+	// we compute the parent public key
+	pubParentKey, _ := getCompressedPubKey(parentKey.Key[1:])
+
+	// we create the input for the HMAC-SHA512 appending the child index
+	// as a sufix
+	if index>=limitHardened {
+		// for hardened keys we use the parent private key 
+		hmacInput = append(parentKey.Key, childIndex...)
+	} else {
+		// for non-hardened keys we use the parent public key 
+		hmacInput = append(pubParentKey, childIndex...)
+	}
+	
+	// we get the HMAC-SHA512 of the input, the right bits will be used
+	// as the chaincode
+	hmac := getHmac512(seed)
+	hmacKey := hmac[:32]
+	chainCode := hmac[32:]
+
+	// we get the child private key from the left bits of the HMAC-SHA512
+	// output and the parent private key
+	childPrivKey := sumPrivKeys(hmacKey, parentKey.Key[1:])
+	// we check that the child key is valid
+	if err:= checkValidChildKey(hmacKey, childPrivKey); err!=nil {
+		return nil, err
+	}
+
+	// we compute the child fingerprint
+	childFingerprint := getFingerprint(pubParentKey)
+	// we create a new Key object for the child key
+	childKeyObj := &extKey {
+		Version:		privWalletVersion,
+		Depth:			parentKey.Depth + 1,
+		Fingerprint:	childFingerprint,
+		ChildNumber: 	childIndex,
+		ChainCode:		chainCode,
+		Key: 			append([]byte{0}, childPrivKey...),
+	}
+
+	return childKeyObj, nil
+}
 
 
-func NewChildKey(parentKey *Key, index uint32) (*Key, error){	
-	// if the child key is hardened and the parent key is not private
-	// we return an error
-	if index>limitHardened && !parentKey.IsPrivate {
+// ChildKeyGenPub returns a Key object with a private child key using as input
+// its parent key and a child index (capable of producing both hardened and
+// non-hardened keys)
+func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
+	// we check that the parent is a public key
+	if err:=checkPubKey(parentKey); err!=nil {
+		return nil, err
+	}
+	// we check that the child is not a hardened key
+	if index>=limitHardened {
 		return nil, hardenedPubKeyError
 	}
 
-	// if the child key is hardened and the parent key is not private
-	// we return an error
-	var input []byte
-	if index>limitHardened || !parentKey.IsPrivate {
-		input = parentKey.Key
-	} else {
-		input, err = getPublicKey(parentKey.Key)
-		if err!=nil {
-			return nil, err
-		}
-	}
-
-	//
+	// we get the child index as a []byte
 	childIndex := make([]byte, 4)
 	binary.BigEndian.PutUint32(childIndex, index)
-	hmacInput = append(input, childIndex...)
 
-	//
-	childKey, chainCode, err := getHmac512(hmacInput)
-	if err!=nil {
-		return nil, err		
+	// we create the input for the HMAC-SHA512 appending the child index
+	// as a sufix to the parent public key
+	hmacInput = append(parentKey.Key, childIndex...)
+
+	// we get the HMAC-SHA512 of the input, the right bits will be used
+	// as the chaincode
+	hmac := getHmac512(seed)
+	hmacKey := hmac[:32]
+	chainCode := hmac[32:]
+
+	// we get the child private key from the left bits of the HMAC-SHA512
+	// output and the parent private key
+	pubHmacKey, _ := getUncompressedPubKey(hmacKey)
+	childPubKey := sumPubKeys(pubHmacKey, parentKey.Key)
+
+	// we check that the child key is valid
+	if err:= checkValidChildKey(hmacKey, childPubKey); err!=nil {
+		return nil, err
 	}
 
-	//
-	newChildKey := &Key {
+	// we compute the child fingerprint
+	childFingerprint := getFingerprint(parentKey.Key)
+
+	// we create a new Key object for the child key
+	childKeyObj := &extKey {
+		Version:		pubWalletVersion,
 		Depth:			parentKey.Depth + 1,
+		Fingerprint:	childFingerprint,
 		ChildNumber: 	childIndex,
 		ChainCode:		chainCode,
-		IsPrivate:		parentKey.IsPrivate,
+		Key: 			childPubKey,
 	}
 
-	//
-	if parentKey.IsPrivate {
-		newChildKey.Version = privWalletVersion
-		parentPubKey, err := getPublicKey(parentKey.Key)
-		if err!=nil {
-			return nil, err
-		}
-	} else {
-
-	}
-
-	return newChildKey, nil
+	return childKeyObj, err
 }
 
 
-
-
-
-/************************** Utilities *****************************/
-// getHmac512
-func getHmac512(input []byte) ([]byte, []byte, error) {
-	// we get the HMAC-512 of the seed
-	hmac512 := hmac.New(sha512.New, []byte("Bitcoin seed"))
-	_, err := hmac512.Write(input)
-	if err!=nil{
-		return nil, nil, readerHmacError
-	}
-	
-	// the HMAC-512 is separated into private key and chaincode
-	hash := hmac512.Sum(nil)
-	newKey := hash[:32]
-	chainCode := hash[32:]
-
-	return newKey, chainCode, nil
-}
-
-
-// checkValidPrivateKey checks if the generated private master key 
-// is valid and returns the corresponding err
-func checkValidPrivateKey(privateKey []byte) error {
-	if (bytes.Compare(privateKey,zeroPrivKey)==0) || (bytes.Compare(privateKey,curve256.N.Bytes())>=0) {
-		return invalidPrivKeyError
-	}
-	return nil
-}
-
-
-func getPublicKey(privateKey *Key) ([]byte, error) {
-	if !privateKey.IsPrivate {
+/************************** Neuter function *****************************/
+// Neuter returns the extended public key corresponding to a given extended
+// private key
+func Neuter(parentKey *extKey, index uint32) (*extKey, error){
+	// we check that the parent is a private key
+	if bytes.Compare(parentKey.Version, privWalletVersion)!=0 {
 		return nil, notPrivKeyError
 	}
-	x, y := curve256.ScalarBaseMult(privateKey.Key[1:])
-	publicKey := compressPubKey(x,y)
-	return publicKey, nil
+
+	// we compute the parent public key
+	pubKey, err := getCompressedPubKey(parentKey)
+	if err!=nil {
+		return nil, err
+	}
+
+	// we create a new Key object for the public key
+	pubKeyObj := &extKey {
+		Version:		pubWalletVersion,
+		Depth:			parentKey.Depth,
+		Fingerprint:	parentKey.Fingerprint,
+		ChildNumber: 	parentKey.ChildNumber,
+		ChainCode:		parentKey.ChainCode,
+		Key: 			pubKey,
+	}
+
+	return pubKeyObjpubKeyObj, nil
 }
 
 
-func compressPubKey(x *big.Int, y *big.Int) []byte {
-	var publicKey []byte
-	if y.Bit(0)==0 {
-		publicKey = append([]byte{2}, x.Bytes()...)		
-	} else {
-		publicKey = append([]byte{3}, x.Bytes()...)
+/************************** Serialization functions  *****************************/
+// getUncompressedPubKey returns the uncompressed public key of a given private key in
+// the form of a 64-byte slice (does not include 0x04 prefix)
+func Serialization(key *extKey) ([]byte, error) {
+	byteBuffer := new(bytes.Buffer)
+	byteBuffer.Write(key.Version)
+	byteBuffer.Write(key.Depth)
+	buteBuffer.Write(key.Fingerprint)
+	byteBuffer.Write(key.ChildNumber)
+	byteBuffer.Write(key.ChainCode)
+	byteBuffer.Write(key.Key)
+
+	keyBytes := addChecksum(byteBuffer.Bytes())
+	return base58.Encode(serializedKey), nil
+}
+
+// getCompressedPubKey returns the compressed public key of a given private key in the 
+// form of a 33-byte slice (includes the 0x02 or 0x03 prefix)
+func Deserialization(serializedKey []byte) (*extKey, error) {
+	keyBytes := base58.Decode(serializedKey)
+	if err:=checkValidChecksum(keyBytes[:78], keyBytes[78:]); err!=nil {
+		return nil, err
 	}
-	return publicKey
+	key := &extKey {
+		Version:		keyBytes[0:4],
+		Depth:			keyBytes[4],
+		Fingerprint:	keyBytes[5:9],
+		ChildNumber: 	keyBytes[9:13],
+		ChainCode:		keyBytes[13:45],
+		Key: 			keyBytes[45:78],
+	}
+
+	return key, nil
 }
