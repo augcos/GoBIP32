@@ -172,3 +172,12 @@ func TestPrivKeyDerivation(t *testing.T) {
 
 	}
 }
+
+func TestInvalidKeys(t *testing.T) {
+	for _,key := range invalidKeys {
+		_,err := Deserialization(key)
+		if err==nil {
+			t.Errorf("Key should be invalid")
+		}
+	}
+}

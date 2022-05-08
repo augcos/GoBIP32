@@ -19,6 +19,11 @@ var (
 	privKeyError = errors.New("Key is private: must be public")
 	invalidChecksumError = errors.New("Checksum is not valid")
 	invalidKeyEcdsa = errors.New("Invalid key: does not correspond to any point in the secp256k1 curve")
+
+	invalidKeySize = errors.New("Invalid serialized key: wrong bit size")
+	invalidKeyVersion = errors.New("Invalid serialized key: version field is invalid")
+	invalidKeyField = errors.New("Invalid serialized key: key field is invalid")
+	invalidKeyDepth = errors.New("Invalid serialized key: depth field is invalid (mismatch with non-zero fingerprint or index)")
 )
 
 /************************** Hashing functions *****************************/
@@ -93,12 +98,43 @@ func checkPubKey(key *extKey) error {
 	return nil
 }
 
+func checkValidVersion(key *extKey) error {
+	if bytes.Compare(key.Version, privWalletVersion)!=0 || bytes.Compare(key.Version, privWalletVersion)!=0 {
+		return notPrivKeyError
+	}
+	return nil
+}
+
 // checkValidChecksum checks if the provided key is private 
 func checkValidChecksum(input []byte, checksum []byte) error {
 	newChecksum := getDoubleSha256(input)
 	if bytes.Compare(newChecksum[:4], checksum)!=0 {
 		return invalidChecksumError
 	}
+	return nil
+}
+
+func checkValidExtKey(key *extKey) error {
+	if bytes.Compare(key.Version, privWalletVersion)==0 {
+		if key.Key[0]!=0 || len(key.Key)!=33{
+			return invalidKeyField
+		}
+	} else if bytes.Compare(key.Version, pubWalletVersion)==0 {
+		if (key.Key[0]!=2 && key.Key[0]!=3) || len(key.Key)!=33{
+			return invalidKeyField
+		}
+		if err:= checkValidChildKey(key.Key[1:], key.Key[1:]); err!=nil {
+			return err
+		}
+
+	} else {
+		return invalidKeyVersion
+	}
+
+	if key.Depth==0 && (bytes.Compare(key.Fingerprint, []byte{0, 0, 0, 0})!=0 || bytes.Compare(key.ChildNumber, []byte{0, 0, 0, 0})!=0) {
+		return invalidKeyDepth
+	}
+
 	return nil
 }
 

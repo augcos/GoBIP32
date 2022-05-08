@@ -65,6 +65,10 @@ func GenMasterKey(seed []byte) (*extKey, error){
 // its parent key and a child index (capable of producing both hardened and
 // non-hardened keys)
 func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
+	if err:=checkValidExtKey(parentKey); err!=nil {
+		return nil, err
+	}
+
 	// we check that the parent is a private key
 	if err:=checkPrivKey(parentKey); err!=nil {
 		return nil, err
@@ -122,6 +126,10 @@ func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
 // its parent key and a child index (capable of producing both hardened and
 // non-hardened keys)
 func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
+	if err:=checkValidExtKey(parentKey); err!=nil {
+		return nil, err
+	}
+
 	// we check that the parent is a public key
 	if err:=checkPubKey(parentKey); err!=nil {
 		return nil, err
@@ -179,6 +187,10 @@ func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
 // Neuter returns the extended public key corresponding to a given extended
 // private key
 func Neuter(parentKey *extKey) (*extKey, error){
+	if err:=checkValidExtKey(parentKey); err!=nil {
+		return nil, err
+	}
+
 	// we check that the parent is a private key
 	if bytes.Compare(parentKey.Version, privWalletVersion)!=0 {
 		return nil, notPrivKeyError
@@ -192,7 +204,7 @@ func Neuter(parentKey *extKey) (*extKey, error){
 		Version:		pubWalletVersion,
 		Depth:			parentKey.Depth,
 		Fingerprint:	parentKey.Fingerprint,
-		ChildNumber: 	parentKey.ChildNumber,
+		ChildNumber:	parentKey.ChildNumber,
 		ChainCode:		parentKey.ChainCode,
 		Key: 			pubKey,
 	}
@@ -221,6 +233,9 @@ func Serialization(key *extKey) (string, error) {
 // form of a 33-byte slice (includes the 0x02 or 0x03 prefix)
 func Deserialization(serializedKey string) (*extKey, error) {
 	keyBytes := base58.Decode(serializedKey)
+	if len(keyBytes)!=78 {
+		return nil, invalidKeySize
+	}
 	if err:=checkValidChecksum(keyBytes[:78], keyBytes[78:]); err!=nil {
 		return nil, err
 	}
@@ -231,6 +246,10 @@ func Deserialization(serializedKey string) (*extKey, error) {
 		ChildNumber: 	keyBytes[9:13],
 		ChainCode:		keyBytes[13:45],
 		Key: 			keyBytes[45:78],
+	}
+
+	if err:=checkValidExtKey(key); err!=nil {
+		return nil, err
 	}
 
 	return key, nil
