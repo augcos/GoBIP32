@@ -173,6 +173,29 @@ func TestPrivKeyDerivation(t *testing.T) {
 	}
 }
 
+func TestPubKeyDerivation(t *testing.T) {
+	for _, masterKey := range vectorSlice {
+		seed,_ := hex.DecodeString(masterKey.seed)
+		privKey,_ := GenMasterKey(seed)
+		pubKey,_ := Neuter(privKey)
+
+		for _,childKey := range masterKey.childTree {
+			pubKey,_ = ChildKeyDerivPub(pubKey, childKey.idxChild)
+
+			if childKey.idxChild>=limitHardened && pubKey!=nil {
+				t.Errorf("Child public key derivation should be invalid")
+			}
+			if childKey.idxChild<limitHardened && pubKey==nil {
+				t.Errorf("Child public key derivation should be valid")
+			}
+			
+			privKey,_ = ChildKeyDerivPriv(privKey, childKey.idxChild)
+			pubKey,_ = Neuter(privKey)
+		}
+
+	}
+}
+
 func TestInvalidKeys(t *testing.T) {
 	for _,key := range invalidKeys {
 		_,err := Deserialization(key)
