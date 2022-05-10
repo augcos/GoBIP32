@@ -19,8 +19,8 @@ type ExtKey struct {
 	Depth			byte
 	Fingerprint		[]byte
 	ChildNumber		[]byte
-	ChainCode		[]byte
-	Key             []byte
+	ChainCode       []byte
+	Key                 []byte
 }
 ```
 An ExtKey object represents an extended key according to the BIP32 standard.
