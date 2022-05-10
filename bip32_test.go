@@ -120,6 +120,7 @@ var vectorSlice = []testMasterKey {
 }
 
 
+/************************** Test invalid serialized keys *****************************/
 var invalidKeys = []string{
 	"xpub661MyMwAqRbcEYS8w7XLSVeEsBXy79zSzH1J8vCdxAZningWLdN3zgtU6LBpB85b3D2yc8sfvZU521AAwdZafEz7mnzBBsz4wKY5fTtTQBm",
 	"xprv9s21ZrQH143K24Mfq5zL5MhWK9hUhhGbd45hLXo2Pq2oqzMMo63oStZzFGTQQD3dC4H2D5GBj7vWvSQaaBv5cxi9gafk7NF3pnBju6dwKvH",
@@ -140,7 +141,7 @@ var invalidKeys = []string{
 
 }
 
-
+// func TestPrivKeyDerivation tests child key derivation from parent private keys
 func TestPrivKeyDerivation(t *testing.T) {
 	for _, masterKey := range vectorSlice {
 		seed,_ := hex.DecodeString(masterKey.seed)
@@ -157,7 +158,7 @@ func TestPrivKeyDerivation(t *testing.T) {
 		}
 
 		for _,childKey := range masterKey.childTree {
-			privKey,_ = ChildKeyDerivPriv(privKey, childKey.idxChild)
+			privKey,_ = ChildKeyDeriv(privKey, childKey.idxChild)
 			pubKey,_ = Neuter(privKey)
 
 			serializedPrivKey,_ = Serialization(privKey)
@@ -173,6 +174,7 @@ func TestPrivKeyDerivation(t *testing.T) {
 	}
 }
 
+// func TestPubKeyDerivation tests child key derivation from parent public keys
 func TestPubKeyDerivation(t *testing.T) {
 	for _, masterKey := range vectorSlice {
 		seed,_ := hex.DecodeString(masterKey.seed)
@@ -180,22 +182,29 @@ func TestPubKeyDerivation(t *testing.T) {
 		pubKey,_ := Neuter(privKey)
 
 		for _,childKey := range masterKey.childTree {
-			pubKey,_ = ChildKeyDerivPub(pubKey, childKey.idxChild)
+			pubKey,_ = ChildKeyDeriv(pubKey, childKey.idxChild)
 
 			if childKey.idxChild>=limitHardened && pubKey!=nil {
 				t.Errorf("Child public key derivation should be invalid")
+			}			
+			if childKey.idxChild<limitHardened {
+				if pubKey==nil {
+					t.Errorf("Child public key derivation should be valid")
+				} else {
+					serializedPubKey,_ := Serialization(pubKey)
+					if serializedPubKey!=childKey.pubKey {
+						t.Errorf("Child public key derivation is invalid")
+					}
+				}
 			}
-			if childKey.idxChild<limitHardened && pubKey==nil {
-				t.Errorf("Child public key derivation should be valid")
-			}
-			
-			privKey,_ = ChildKeyDerivPriv(privKey, childKey.idxChild)
+			privKey,_ = ChildKeyDeriv(privKey, childKey.idxChild)
 			pubKey,_ = Neuter(privKey)
 		}
 
 	}
 }
 
+// func TestPubKeyDerivation tests the invalid serialized keys
 func TestInvalidKeys(t *testing.T) {
 	for _,key := range invalidKeys {
 		_,err := Deserialization(key)

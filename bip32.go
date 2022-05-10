@@ -61,10 +61,27 @@ func GenMasterKey(seed []byte) (*extKey, error){
 
 
 /************************** Child Key Derivation *****************************/
-// ChildKeyGenPriv returns a Key object with a private child key using as input
-// its parent key and a child index (capable of producing both hardened and
-// non-hardened keys)
+// ChildKeyDeriv accepts any key (private or public) and calls the corresponding
+// child key derivation function, and then returns the child key
+func ChildKeyDeriv(parentKey *extKey, index uint32) (*extKey, error) {
+	var childKey *extKey
+	var err error
+
+	if bytes.Compare(parentKey.Version, privWalletVersion)==0 {
+		childKey, err = ChildKeyDerivPriv(parentKey, index)
+	} else if bytes.Compare(parentKey.Version, pubWalletVersion)==0 {
+		childKey, err = ChildKeyDerivPub(parentKey, index)
+	} else {
+		return nil, invalidKeyVersion
+	}
+	return childKey, err
+}
+
+
+// ChildKeyGenPriv returns private child key using as input its parent private 
+// key and a child index (capable of producing both hardened and non-hardened keys)
 func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
+	// we check that the key is valid
 	if err:=checkValidExtKey(parentKey); err!=nil {
 		return nil, err
 	}
@@ -122,10 +139,10 @@ func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
 }
 
 
-// ChildKeyGenPub returns a Key object with a private child key using as input
-// its parent key and a child index (capable of producing both hardened and
-// non-hardened keys)
+// ChildKeyGenPub returns public child key using as input its parent public key 
+// and a child index (capable of producing both hardened and non-hardened keys)
 func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
+	// we check that the key is valid
 	if err:=checkValidExtKey(parentKey); err!=nil {
 		return nil, err
 	}
@@ -182,30 +199,30 @@ func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
 	return childKeyObj, nil
 }
 
-
 /************************** Neuter function *****************************/
 // Neuter returns the extended public key corresponding to a given extended
 // private key
-func Neuter(parentKey *extKey) (*extKey, error){
-	if err:=checkValidExtKey(parentKey); err!=nil {
+func Neuter(privateKey *extKey) (*extKey, error){
+	// we check that the key is valid
+	if err:=checkValidExtKey(privateKey); err!=nil {
 		return nil, err
 	}
 
 	// we check that the parent is a private key
-	if bytes.Compare(parentKey.Version, privWalletVersion)!=0 {
-		return nil, notPrivKeyError
+	if err:=checkPrivKey(privateKey); err!=nil {
+		return nil, err
 	}
 
 	// we compute the parent public key
-	pubKey := getCompressedPubKey(parentKey.Key[1:])
+	pubKey := getCompressedPubKey(privateKey.Key[1:])
 
 	// we create a new Key object for the public key
 	pubKeyObj := &extKey {
 		Version:		pubWalletVersion,
-		Depth:			parentKey.Depth,
-		Fingerprint:	parentKey.Fingerprint,
-		ChildNumber:	parentKey.ChildNumber,
-		ChainCode:		parentKey.ChainCode,
+		Depth:			privateKey.Depth,
+		Fingerprint:	privateKey.Fingerprint,
+		ChildNumber:	privateKey.ChildNumber,
+		ChainCode:		privateKey.ChainCode,
 		Key: 			pubKey,
 	}
 
@@ -214,9 +231,11 @@ func Neuter(parentKey *extKey) (*extKey, error){
 
 
 /************************** Serialization functions  *****************************/
-// getUncompressedPubKey returns the uncompressed public key of a given private key in
-// the form of a 64-byte slice (does not include 0x04 prefix)
+// Serialization returns the serialized extended key as a string
 func Serialization(key *extKey) (string, error) {
+	if err:=checkValidExtKey(key); err!=nil {
+		return "", err
+	}
 	byteBuffer := new(bytes.Buffer)
 	byteBuffer.Write(key.Version)
 	byteBuffer.WriteByte(key.Depth)
@@ -233,7 +252,7 @@ func Serialization(key *extKey) (string, error) {
 // form of a 33-byte slice (includes the 0x02 or 0x03 prefix)
 func Deserialization(serializedKey string) (*extKey, error) {
 	keyBytes := base58.Decode(serializedKey)
-	if len(keyBytes)!=78 {
+	if len(keyBytes)!=82 {
 		return nil, invalidKeySize
 	}
 	if err:=checkValidChecksum(keyBytes[:78], keyBytes[78:]); err!=nil {
@@ -251,6 +270,5 @@ func Deserialization(serializedKey string) (*extKey, error) {
 	if err:=checkValidExtKey(key); err!=nil {
 		return nil, err
 	}
-
 	return key, nil
 }
