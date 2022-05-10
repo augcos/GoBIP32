@@ -15,12 +15,12 @@ This is an implementation of the [BIP32](https://github.com/bitcoin/bips/blob/ma
 ### type ExtKey
 ```
 type ExtKey struct {
-	Version			[]byte
-	Depth			byte
-	Fingerprint		[]byte
-	ChildNumber		[]byte
+	Version         []byte
+	Depth           byte
+	Fingerprint     []byte
+	ChildNumber     []byte
 	ChainCode       []byte
-	Key                 []byte
+	Key             []byte
 }
 ```
 An ExtKey object represents an extended key according to the BIP32 standard.
