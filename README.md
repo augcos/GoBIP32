@@ -73,4 +73,4 @@ Serialization returns the serialized extended key as a string.
 ```
 func Deserialization(serializedKey string) (*Extkey, error)
 ```
-// Deserialization returns the ExtKey objet of a given serialized key.
+Deserialization returns the ExtKey objet of a given serialized key.
