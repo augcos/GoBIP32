@@ -98,7 +98,7 @@ func checkValidChildKey(hmacLeft []byte, childKey []byte) error {
 }
 
 // checkPrivKey checks if the provided key is private 
-func checkPrivKey(key *extKey) error {
+func checkPrivKey(key *Extkey) error {
 	if bytes.Compare(key.Version, privWalletVersion)!=0 {
 		return notPrivKeyError
 	}
@@ -106,7 +106,7 @@ func checkPrivKey(key *extKey) error {
 }
 
 // checkPubKey checks if the provided key is public 
-func checkPubKey(key *extKey) error {
+func checkPubKey(key *Extkey) error {
 	if bytes.Compare(key.Version, pubWalletVersion)!=0 {
 		return notPubKeyError
 	}
@@ -123,7 +123,7 @@ func checkValidChecksum(input []byte, checksum []byte) error {
 }
 
 // checkValidChecksum checks if the extended key is valid
-func checkValidExtKey(key *extKey) error {
+func checkValidExtkey(key *Extkey) error {
 	// if key is private
 	if bytes.Compare(key.Version, privWalletVersion)==0 {
 		// we check for the 0x00 prefix

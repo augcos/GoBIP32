@@ -11,7 +11,7 @@ import (
 
 
 /************************** Extended Key Struct *****************************/
-type extKey struct {
+type Extkey struct {
 	Version			[]byte
 	Depth			byte
 	Fingerprint		[]byte
@@ -31,9 +31,9 @@ var (
 )
 
 /************************** Master Key Generation *****************************/
-// GenMasterKey takes a seed as an input and returns a Key object for the master
-// key
-func GenMasterKey(seed []byte) (*extKey, error){
+// GenMasterKey takes a seed as an input and returns an extended key object for 
+// the master key
+func GenMasterKey(seed []byte) (*Extkey, error){
 	// we get the HMAC-512 of the seed
 	hmac := getHmac512(seed, []byte("Bitcoin seed"))
 	key := hmac[:32] 
@@ -46,7 +46,7 @@ func GenMasterKey(seed []byte) (*extKey, error){
 	}
 
 	// the master key is saved as a pointer to a Key struct
-	masterKey := &extKey {
+	masterKey := &Extkey {
 		Version:		privWalletVersion,
 		Depth:			0,
 		Fingerprint:	[]byte{0, 0, 0, 0},
@@ -61,10 +61,10 @@ func GenMasterKey(seed []byte) (*extKey, error){
 
 
 /************************** Child Key Derivation *****************************/
-// ChildKeyDeriv accepts any key (private or public) and calls the corresponding
-// child key derivation function, and then returns the child key
-func ChildKeyDeriv(parentKey *extKey, index uint32) (*extKey, error) {
-	var childKey *extKey
+// ChildKeyDeriv accepts any extended key (private or public), calls the
+// corresponding child key derivation function and then returns the child key
+func ChildKeyDeriv(parentKey *Extkey, index uint32) (*Extkey, error) {
+	var childKey *Extkey
 	var err error
 
 	if bytes.Compare(parentKey.Version, privWalletVersion)==0 {
@@ -78,11 +78,11 @@ func ChildKeyDeriv(parentKey *extKey, index uint32) (*extKey, error) {
 }
 
 
-// ChildKeyGenPriv returns private child key using as input its parent private 
-// key and a child index (capable of producing both hardened and non-hardened keys)
-func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
+// ChildKeyGenPriv returns an extended private child key using as input its extended 
+// parent private key and a child index (capable of producing both hardened and non-hardened keys)
+func ChildKeyDerivPriv(parentKey *Extkey, index uint32) (*Extkey, error) {
 	// we check that the key is valid
-	if err:=checkValidExtKey(parentKey); err!=nil {
+	if err:=checkValidExtkey(parentKey); err!=nil {
 		return nil, err
 	}
 
@@ -126,7 +126,7 @@ func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
 	// we compute the child fingerprint
 	childFingerprint := getFingerprint(pubParentKey)
 	// we create a new Key object for the child key
-	childKeyObj := &extKey {
+	childKeyObj := &Extkey {
 		Version:		privWalletVersion,
 		Depth:			parentKey.Depth + 1,
 		Fingerprint:	childFingerprint,
@@ -139,11 +139,11 @@ func ChildKeyDerivPriv(parentKey *extKey, index uint32) (*extKey, error) {
 }
 
 
-// ChildKeyGenPub returns public child key using as input its parent public key 
-// and a child index (capable of producing both hardened and non-hardened keys)
-func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
+// ChildKeyGenPriv returns an extended public child key using as input its extended parent public 
+// key and a child index
+func ChildKeyDerivPub(parentKey *Extkey, index uint32) (*Extkey, error) {
 	// we check that the key is valid
-	if err:=checkValidExtKey(parentKey); err!=nil {
+	if err:=checkValidExtkey(parentKey); err!=nil {
 		return nil, err
 	}
 
@@ -187,7 +187,7 @@ func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
 	childFingerprint := getFingerprint(parentKey.Key)
 
 	// we create a new Key object for the child key
-	childKeyObj := &extKey {
+	childKeyObj := &Extkey {
 		Version:		pubWalletVersion,
 		Depth:			parentKey.Depth + 1,
 		Fingerprint:	childFingerprint,
@@ -202,9 +202,9 @@ func ChildKeyDerivPub(parentKey *extKey, index uint32) (*extKey, error) {
 /************************** Neuter function *****************************/
 // Neuter returns the extended public key corresponding to a given extended
 // private key
-func Neuter(privateKey *extKey) (*extKey, error){
+func Neuter(privateKey *Extkey) (*Extkey, error){
 	// we check that the key is valid
-	if err:=checkValidExtKey(privateKey); err!=nil {
+	if err:=checkValidExtkey(privateKey); err!=nil {
 		return nil, err
 	}
 
@@ -217,7 +217,7 @@ func Neuter(privateKey *extKey) (*extKey, error){
 	pubKey := getCompressedPubKey(privateKey.Key[1:])
 
 	// we create a new Key object for the public key
-	pubKeyObj := &extKey {
+	pubKeyObj := &Extkey {
 		Version:		pubWalletVersion,
 		Depth:			privateKey.Depth,
 		Fingerprint:	privateKey.Fingerprint,
@@ -232,8 +232,8 @@ func Neuter(privateKey *extKey) (*extKey, error){
 
 /************************** Serialization functions  *****************************/
 // Serialization returns the serialized extended key as a string
-func Serialization(key *extKey) (string, error) {
-	if err:=checkValidExtKey(key); err!=nil {
+func Serialization(key *Extkey) (string, error) {
+	if err:=checkValidExtkey(key); err!=nil {
 		return "", err
 	}
 	byteBuffer := new(bytes.Buffer)
@@ -248,9 +248,8 @@ func Serialization(key *extKey) (string, error) {
 	return base58.Encode(keyBytes), nil
 }
 
-// getCompressedPubKey returns the compressed public key of a given private key in the 
-// form of a 33-byte slice (includes the 0x02 or 0x03 prefix)
-func Deserialization(serializedKey string) (*extKey, error) {
+// Deserialization returns the ExtKey objet of a given serialized key
+func Deserialization(serializedKey string) (*Extkey, error) {
 	keyBytes := base58.Decode(serializedKey)
 	if len(keyBytes)!=82 {
 		return nil, invalidKeySize
@@ -258,7 +257,7 @@ func Deserialization(serializedKey string) (*extKey, error) {
 	if err:=checkValidChecksum(keyBytes[:78], keyBytes[78:]); err!=nil {
 		return nil, err
 	}
-	key := &extKey {
+	key := &Extkey {
 		Version:		keyBytes[0:4],
 		Depth:			keyBytes[4],
 		Fingerprint:	keyBytes[5:9],
@@ -267,7 +266,7 @@ func Deserialization(serializedKey string) (*extKey, error) {
 		Key: 			keyBytes[45:78],
 	}
 
-	if err:=checkValidExtKey(key); err!=nil {
+	if err:=checkValidExtkey(key); err!=nil {
 		return nil, err
 	}
 	return key, nil
