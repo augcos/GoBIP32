@@ -20,10 +20,10 @@ type ExtKey struct {
 	Fingerprint		[]byte
 	ChildNumber		[]byte
 	ChainCode		[]byte
-	Key				[]byte
+	Key             []byte
 }
 ```
-An ExtKey represents an extended key according to the BIP32 standard.
+An ExtKey object represents an extended key according to the BIP32 standard.
 
 ### func GenMasterKey
 ```
