@@ -21,15 +21,6 @@ type Extkey struct {
 }
 
 
-/************************** Internal package variables *****************************/
-var (
-	curve256 = secp256k1.S256()
-	zeroPrivKey = make([]byte, 32)
-	privWalletVersion, _ = hex.DecodeString("0488ADE4")
-	pubWalletVersion, _ = hex.DecodeString("0488B21E")
-	limitHardened = uint32(0x80000000)
-)
-
 /************************** Master Key Generation *****************************/
 // GenMasterKey takes a seed as an input and returns an extended key object for 
 // the master key

@@ -11,6 +11,17 @@ import (
 	"golang.org/x/crypto/ripemd160"
 )
 
+
+/************************** Internal package variables *****************************/
+var (
+	curve256 = secp256k1.S256()
+	zeroPrivKey = make([]byte, 32)
+	privWalletVersion, _ = hex.DecodeString("0488ADE4")
+	pubWalletVersion, _ = hex.DecodeString("0488B21E")
+	limitHardened = uint32(0x80000000)
+)
+
+/************************** Internal error variables *****************************/
 var (
 	hardenedPubKeyError = errors.New("Error: not possible to create a hardened child key from a public key")
 
@@ -122,7 +133,7 @@ func checkValidChecksum(input []byte, checksum []byte) error {
 	return nil
 }
 
-// checkValidChecksum checks if the extended key is valid
+// checkValidExtkey checks if the extended key is valid
 func checkValidExtkey(key *Extkey) error {
 	// if key is private
 	if bytes.Compare(key.Version, privWalletVersion)==0 {
@@ -130,7 +141,7 @@ func checkValidExtkey(key *Extkey) error {
 		if key.Key[0]!=0 {
 			return invalidPrivKeyPrefix	// invalid private key prefix
 		}
-		// we check if the private key is a valid number
+		// we check that the private key is a valid number
 		if bytes.Compare(key.Key[1:],curve256.N.Bytes())>=0 || bytes.Compare(key.Key[1:],zeroPrivKey)==0 {
 			return invalidPrivKeyRange // invalid private key
 		}
@@ -141,7 +152,7 @@ func checkValidExtkey(key *Extkey) error {
 			return invalidPubKeyPrefix	// invalid public key prefix
 		}
 		// we uncompress the key and check if the point is on the secp256k1 curve
-		x,y,err := uncompressPubKey(key.Key)
+		x, y, err := uncompressPubKey(key.Key)
 		if err!=nil {
 			return err
 		}
@@ -217,7 +228,7 @@ func uncompressPubKey(key []byte) (*big.Int, *big.Int, error) {
 	x := new(big.Int).SetBytes(key[1:])		// we take the x coordinate (without the prefix)
 	y := big.NewInt(0)
 	
-	// we compute y^2=x^3+b
+	// we compute the y from the y^2=x^3+b equation
 	y.Exp(x, big.NewInt(3), nil)
 	y.Add(y, curve256.B)
 	y.ModSqrt(y, curve256.P)
@@ -225,7 +236,7 @@ func uncompressPubKey(key []byte) (*big.Int, *big.Int, error) {
 		return nil, nil, invalidPubKeySqrt	// invalid x coordinate
 	}
 
-	// we change the sign of if necessary
+	// we change the sign of the y coordinate if necessary
 	if y.Bit(0)!=uint(key[0]) & 1 {
 		y.Neg(y)
 		y.Mod(y, curve256.P)
