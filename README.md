@@ -5,7 +5,7 @@ This is an implementation of the [BIP32](https://github.com/bitcoin/bips/blob/ma
 
 ## References
 ```
-- BIP39 specifications: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
+- BIP32 specifications: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
 - Mastering Bitcoin by Andreas M. Antonopoulos: https://github.com/bitcoinbook/bitcoinbook
 - Tyler Smith's BIP32 implementation: https://github.com/tyler-smith/go-bip32
 ```
