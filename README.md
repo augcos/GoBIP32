@@ -1,76 +1,41 @@
-# BIP32
+# __bip32__
 ## Introduction
-This is an implementation of the [BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki) standard in the [Go programming language](https://go.dev/).
-<br/></br>
+This package is an implementation of the __[BIP32](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)__ specifications in the __[Go programming language](https://go.dev/)__. You can read the documentation __[here](https://pkg.go.dev/github.com/augcos/bip32)__.
 
-## References
-```
-- BIP32 specifications: https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
-- Mastering Bitcoin by Andreas M. Antonopoulos: https://github.com/bitcoinbook/bitcoinbook
-- Tyler Smith's BIP32 implementation: https://github.com/tyler-smith/go-bip32
-```
-<br/></br>
+## Example
+```go
+package main
 
-## Documentation
-### type ExtKey
-```
-type ExtKey struct {
-	Version         []byte
-	Depth           byte
-	Fingerprint     []byte
-	ChildNumber     []byte
-	ChainCode       []byte
-	Key             []byte
+import (
+    "fmt"
+
+    "github.com/augcos/bip32"
+    "github.com/augcos/bip39"
+)
+
+func main() {
+    // we generate the random entropy
+    entropy, _ := bip39.GenEntropy(256)
+    // we generate the mnemonic corresponding to that entropy
+    mnemonic, _ := bip39.GetMnemonicFromEntropy(entropy)
+    // finally, we generate the 512-bit seed from the mnemonic, plus a passphrase
+    seed, _ := bip39.GetSeedFromMnemonic(mnemonic, "passphrase")
+
+    // we create the master key
+    masterKey, _ := bip32.GenMasterKey(seed)
+    // we derivate the child private key
+    childKey, _ := bip32.ChildKeyDeriv(masterKey, 0)
+    // we get the child public key from the private key
+    pubChildKey, _ := bip32.Neuter(childKey)
+
+    // we serialize the child public key
+    serializedPubChildKey, _ := Serialization(pubChildKey)
+
+    fmt.Println("Public Child Key:", serializedPubMasterKey)
 }
 ```
-An ExtKey object represents an extended key according to the BIP32 standard.
 
-### func GenMasterKey
-```
-func GenMasterKey(seed []byte) (*ExtKey, error)
-```
-GenMasterKey takes a seed as an input and returns an extended key object for the master key.
-<br/></br>
-
-### func ChildKeyDeriv
-```
-func ChildKeyDeriv(parentKey *ExtKey, index uint32) (*ExtKey, error)
-```
-ChildKeyDeriv accepts any extended key (private or public), calls the corresponding child key derivation function and then returns the child key.
-<br/></br>
-
-### func ChildKeyDerivPriv
-```
-ChildKeyDerivPriv(parentKey *ExtKey, index uint32) (*ExtKey, error)
-```
-ChildKeyGenPriv returns an extended private child key using as input its extended parent private 
-key and a child index (capable of producing both hardened and non-hardened keys).
-<br/></br>
-
-### func ChildKeyDerivPub
-```
-func ChildKeyDerivPub(parentKey *Extkey, index uint32) (*Extkey, error)
-```
-ChildKeyGenPriv returns an extended public child key using as input its extended parent public 
-key and a child index.
-<br/></br>
-
-### func Neuter
-```
-func Neuter(privateKey *Extkey) (*Extkey, error)
-```
-Neuter returns the extended public key corresponding to a given extended private key.
-<br/></br>
-
-### func Serialization
-```
-func Serialization(key *Extkey) (string, error)
-```
-Serialization returns the serialized extended key as a string.
-<br/></br>
-
-### func Deserialization
-```
-func Deserialization(serializedKey string) (*Extkey, error)
-```
-Deserialization returns the ExtKey objet of a given serialized key.
+## References
+* [__BIP39 specifications__](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
+* [__Mastering Bitcoin__](https://github.com/bitcoinbook/bitcoinbook) by Andreas M. Antonopoulos: 
+* Tyler Smith's __[BIP39 Go implementation](https://github.com/tyler-smith/go-bip32)__

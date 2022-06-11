@@ -7,12 +7,15 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/hex"
 
 	"golang.org/x/crypto/ripemd160"
+	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 )
 
 
-/************************** Internal package variables *****************************/
+/********************************************** Internal package variables ********************************************/
+
 var (
 	curve256 = secp256k1.S256()
 	zeroPrivKey = make([]byte, 32)
@@ -21,16 +24,15 @@ var (
 	limitHardened = uint32(0x80000000)
 )
 
-/************************** Internal error variables *****************************/
+/********************************************** Internal error variables **********************************************/
+
 var (
 	hardenedPubKeyError = errors.New("Error: not possible to create a hardened child key from a public key")
-
 	invalidMasterKey = errors.New("Invalid master key: key should be between 1 and n-1")
 	invalidChildKey = errors.New("Invalid child key: out of range")
 	notPrivKeyError = errors.New("Invalid private key: key must be private")
 	notPubKeyError = errors.New("Invalid public key: key must be public")
 	invalidChecksumError = errors.New("Invalid key: checksum is not valid")
-
 	invalidPrivKeyPrefix = errors.New("Invalid key: invalid private key prefix (should be 0x00)")
 	invalidPrivKeyRange = errors.New("Invalid key: private key should be between 1 and n-1")
 	invalidPubKeyPrefix = errors.New("Invalid key: invalid public key prefix (should be 0x02 or 0x03)")
@@ -42,22 +44,23 @@ var (
 	
 )
 
-/************************** Hashing functions *****************************/
-// getHmac512 returns the HMAC-SHA512 of a given input and key
+/************************************************ Hashing functions ***************************************************/
+
+// getHmac512 returns the HMAC-SHA512 of a given key and input data
 func getHmac512(input []byte, key []byte) []byte {
 	hmac512 := hmac.New(sha512.New, key)
 	hmac512.Write(input)
 	return hmac512.Sum(nil)
 }
 
-// getSha256 returns the SHA256 of a given input
+// getSha256 returns the SHA256 of a given input data
 func getSha256(input []byte) []byte{
 	sha256 := sha256.New()
 	sha256.Write(input)
 	return sha256.Sum(nil)
 }
 
-// getRipemd160 returns the RIPEMD160 of a given input
+// getRipemd160 returns the RIPEMD160 of a given input data
 func getRipemd160(input []byte) []byte{
 	ripemd160 := ripemd160.New()
 	ripemd160.Write(input)	
@@ -69,21 +72,19 @@ func getHash160(input []byte) []byte{
 	return getRipemd160(getSha256(input))
 }
 
-// getDoubleSha256 returns the double SHA256 of a given input
+// getDoubleSha256 returns the double SHA256 of a given input data
 func getDoubleSha256(input []byte) []byte {
 	return getSha256(getSha256(input))
 }
 
-// getDoubleSha256 returns the fingerprint (first 4 bytes of the hash 160) 
-// of a given input
+// getDoubleSha256 returns the fingerprint (first 4 bytes of the hash 160) of a given input data
 func getFingerprint(input []byte) []byte{
 	identifier := getHash160(input)
 	return identifier[:4]
 }
 
 
-// addChecksum appends the double SHA256 checksum (first 4 bytes) of a
-// given input
+// addChecksum appends the double SHA256 checksum (first 4 bytes) of a given input data
 func addChecksum(input []byte) []byte {
 	checksum := getDoubleSha256(input)
 	output := append(input, checksum[:4]...)
@@ -91,7 +92,7 @@ func addChecksum(input []byte) []byte {
 }
 
 
-/************************** Check Valid Key functions *****************************/
+/******************************************** Check Valid Key functions ***********************************************/
 // checkValidMasterKey checks if the generated master key is valid
 func checkValidMasterKey(masterKey []byte) error {
 	if bytes.Compare(masterKey,curve256.N.Bytes())>=0 || bytes.Compare(masterKey,zeroPrivKey)==0 {
@@ -108,7 +109,7 @@ func checkValidChildKey(hmacLeft []byte, childKey []byte) error {
 	return nil
 }
 
-// checkPrivKey checks if the provided key is private 
+// checkPrivKey checks if the provided extended key is private 
 func checkPrivKey(key *Extkey) error {
 	if bytes.Compare(key.Version, privWalletVersion)!=0 {
 		return notPrivKeyError
@@ -116,7 +117,7 @@ func checkPrivKey(key *Extkey) error {
 	return nil
 }
 
-// checkPubKey checks if the provided key is public 
+// checkPubKey checks if the provided extended key is public 
 func checkPubKey(key *Extkey) error {
 	if bytes.Compare(key.Version, pubWalletVersion)!=0 {
 		return notPubKeyError
@@ -124,7 +125,7 @@ func checkPubKey(key *Extkey) error {
 	return nil
 }
 
-// checkValidChecksum checks if the checksum og a given input is valid
+// checkValidChecksum checks if the checksum of a given input is valid
 func checkValidChecksum(input []byte, checksum []byte) error {
 	newChecksum := getDoubleSha256(input)
 	if bytes.Compare(newChecksum[:4], checksum)!=0 {
@@ -133,7 +134,7 @@ func checkValidChecksum(input []byte, checksum []byte) error {
 	return nil
 }
 
-// checkValidExtkey checks if the extended key is valid
+// checkValidExtkey checks if the provided key is a valid extended key
 func checkValidExtkey(key *Extkey) error {
 	// if key is private
 	if bytes.Compare(key.Version, privWalletVersion)==0 {
@@ -171,7 +172,7 @@ func checkValidExtkey(key *Extkey) error {
 }
 
 
-/************************** Key calculation functions  *****************************/
+/********************************************** Key calculation functions  ********************************************/
 // sumPrivKeys returns the sum of two private keys
 func sumPrivKeys(firstKey []byte, secondKey []byte) []byte{
 	firstInt := new(big.Int).SetBytes(firstKey)		 
@@ -182,7 +183,7 @@ func sumPrivKeys(firstKey []byte, secondKey []byte) []byte{
 	return outKey
 }
 
-// sumPrivKeys returns the sum of two public keys
+// sumPubKeys returns the sum of two public keys
 func sumPubKeys(firstKey []byte, secondKey []byte) ([]byte, error) {
 	x1, y1, err := uncompressPubKey(firstKey)	// we uncompress the first key
 	if err!=nil {
@@ -197,15 +198,15 @@ func sumPubKeys(firstKey []byte, secondKey []byte) ([]byte, error) {
 	return outKey, nil
 }
 
-// ellipticCurvePointMult returns the coordinate pair resulting from the elliptic curve
-// point multiplication secp256k1 base point with the input byte slice
+// ellipticCurvePointMult returns the coordinate pair resulting from the elliptic curve point multiplication secp256k1 
+// base point with the input byte slice
 func ellipticCurvePointMult(input []byte) (*big.Int, *big.Int){
 	x, y := curve256.ScalarBaseMult(input)
 	return x, y
 }
 
-// getCompressedPubKey returns the compressed public key of a given extended private 
-// key in the form of a 33-byte slice (includes the 0x02 or 0x03 prefix)
+// getCompressedPubKey returns the compressed public key of a given extended private key in the form of a 33-byte slice 
+// (includes the 0x02 or 0x03 prefix)
 func getCompressedPubKey(key []byte) []byte {
 	x, y := ellipticCurvePointMult(key)
 	return compressPubKey(x,y)
