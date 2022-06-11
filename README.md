@@ -38,4 +38,4 @@ func main() {
 ## References
 * [__BIP39 specifications__](https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki)
 * [__Mastering Bitcoin__](https://github.com/bitcoinbook/bitcoinbook) by Andreas M. Antonopoulos: 
-* Tyler Smith's __[BIP39 Go implementation](https://github.com/tyler-smith/go-bip32)__
+* Tyler Smith's __[BIP32 Go implementation](https://github.com/tyler-smith/go-bip32)__
