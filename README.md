@@ -29,7 +29,7 @@ func main() {
     pubChildKey, _ := bip32.Neuter(childKey)
 
     // we serialize the child public key
-    serializedPubChildKey, _ := Serialization(pubChildKey)
+    serializedPubChildKey, _ := bip32.Serialization(pubChildKey)
 
     fmt.Println("Public Child Key:", serializedPubMasterKey)
 }
